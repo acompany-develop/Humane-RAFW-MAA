@@ -1,0 +1,26 @@
+enclave
+{
+    include "sgx_trts.h"
+    include "sgx_utils.h"
+
+    from "sgx_tswitchless.edl" import *;
+
+    /* ECALLのプロトタイプを記述 */
+    trusted
+    {   
+        /* RAセッションの初期化を実施 */
+        public sgx_status_t ecall_init_ra([out]uint32_t *ra_ctx);
+
+        /* QE3とのLA用のREPORT構造体の生成 */
+        public sgx_status_t ecall_create_report([in]sgx_target_info_t *qe3_target_info,
+            [out]sgx_report_t *report);
+    };
+
+    /* OCALLのプロトタイプを記述 */
+    untrusted
+    {
+        void ocall_print([in, string]const char *str, int log_type);
+
+        void ocall_print_status(sgx_status_t st);
+    };
+};
