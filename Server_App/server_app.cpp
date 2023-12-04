@@ -2,6 +2,8 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <algorithm>
+#include <sstream>
 #include <unistd.h>
 #include <sgx_urts.h>
 #include <sgx_uswitchless.h>
@@ -18,7 +20,7 @@
 #include "../common/base64.hpp"
 #include "../common/debug_print.hpp"
 #include "../common/hexutil.hpp"
-
+#include "../common/crypto.hpp"
 
 using namespace httplib;
 
@@ -103,6 +105,10 @@ void server_logics(sgx_enclave_id_t eid)
 
         int ret = get_quote(eid, request_json, response_json, error_message);
 
+        print_debug_message("Quote JSON ->", DEBUG_LOG);
+        print_debug_message(response_json, DEBUG_LOG);
+        print_debug_message("", DEBUG_LOG);
+
         if(!ret) res.status = 200;
         else
         {
@@ -180,7 +186,7 @@ int initialize_enclave(sgx_enclave_id_t &eid)
 /* iniファイルから読み込み、失敗時にはプログラムを即時終了する */
 std::string load_from_ini(std::string section, std::string key)
 {
-    mINI::INIFile file("settings.ini");
+    mINI::INIFile file("settings_server.ini");
     mINI::INIStructure ini;
 
     if(!file.read(ini))
@@ -193,7 +199,8 @@ std::string load_from_ini(std::string section, std::string key)
 
     if(ret.length() == 0)
     {
-        std::string message = "Failed to load setting " + key + " from settings.ini.";
+        std::string message = "Failed to load setting " 
+            + key + " from settings_server.ini.";
         print_debug_message(message, ERROR);
         exit(1); 
     }
@@ -205,9 +212,9 @@ std::string load_from_ini(std::string section, std::string key)
 /* 設定情報の読み込み */
 void load_settings()
 {
-    // g_settings.pce_path = load_from_ini("server", "PCE_PATH");
-    // g_settings.qe3_path = load_from_ini("server", "QE3_PATH");
-    // g_settings.ide_path = load_from_ini("server", "IDE_PATH");
+    g_settings.pce_path = load_from_ini("server", "PCE_PATH");
+    g_settings.qe3_path = load_from_ini("server", "QE3_PATH");
+    g_settings.ide_path = load_from_ini("server", "IDE_PATH");
     g_settings.qpl_path = load_from_ini("server", "QPL_PATH");
 }
 
@@ -287,9 +294,45 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
     std::string &response_json, std::string &error_message)
 {
     sgx_target_info_t qe3_target_info;
+    quote3_error_t qe3_error;
+
+    /* in-procモード時はAEの呼び出しに関するセットアップを行う */
+    // qe3_error = sgx_qe_set_enclave_load_policy(SGX_QL_PERSISTENT);
+
+    // if(qe3_error != SGX_QL_SUCCESS)
+    // {
+    //     print_ql_status(qe3_error);
+    //     error_message = "Failed to set enclave load policy.";
+    //     print_debug_message(error_message, ERROR);
+
+    //     return -1;
+    // }
+
+    // if(sgx_ql_set_path(SGX_QL_PCE_PATH, g_settings.pce_path.c_str()) != SGX_QL_SUCCESS ||
+    //     sgx_ql_set_path(SGX_QL_QE3_PATH, g_settings.qe3_path.c_str()) != SGX_QL_SUCCESS ||
+    //     sgx_ql_set_path(SGX_QL_IDE_PATH, g_settings.ide_path.c_str()) != SGX_QL_SUCCESS)
+    // {
+    //     print_ql_status(qe3_error);
+    //     error_message = "Failed to set AE path.";
+    //     print_debug_message(error_message, ERROR);
+
+    //     return -1;
+    // }
+
+    // qe3_error = sgx_ql_set_path(SGX_QL_QPL_PATH, g_settings.qpl_path.c_str());
+
+    // if(qe3_error != SGX_QL_SUCCESS)
+    // {
+    //     print_ql_status(qe3_error);
+    //     error_message = "Failed to set QPL path.";
+    //     print_debug_message(error_message, ERROR);
+
+    //     return -1;
+    // }
+
 
     /* RAの一環であるQE3とのLAのため、QE3のTarget Infoを取得する */
-    quote3_error_t qe3_error = sgx_qe_get_target_info(&qe3_target_info);;
+    qe3_error = sgx_qe_get_target_info(&qe3_target_info);;
     
     if(qe3_error != SGX_QL_SUCCESS)
     {
@@ -305,7 +348,7 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
 
 
     /* ServerのEnclaveのREPORT構造体を取得 */
-    sgx_report_t report;
+    sgx_report_t report = {0};
     memset(&report, 0, sizeof(sgx_report_t));
 
     int ret = get_server_enclave_report(eid, qe3_target_info, report);
@@ -368,35 +411,65 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
     print_debug_message("cert key type ->", DEBUG_LOG);
     print_debug_message(std::to_string(cert_data->cert_key_type), DEBUG_LOG);
     print_debug_message("", DEBUG_LOG);
-
-
-    /* Azure AttestationはReport Dataの下位32バイトの完全性の
-     * 検証も行ってくれるため、Report Dataを抽出しておく */
-    uint8_t *lower_report_data = new uint8_t[32]();
-    uint8_t *report_data_hash = new uint8_t[32]();
-
-    sgx_report_data_t report_data = 
-        quote->report_body.report_data;
     
-    memcpy(lower_report_data, report_data.d + 32, 32);
 
-    BIO_dump_fp(stdout, (char*)lower_report_data, 32);
+    /* Report Dataの上位32bitには、完全性を維持したいデータのハッシュが入っている */
+    print_debug_binary("first 32 bytes of report data",
+        quote->report_body.report_data.d, 32, DEBUG_LOG);
+
+    //この変数は鍵交換する場合は公開鍵の連結とする
+    int content_size = 32;
+    uint8_t *report_data_content = new uint8_t[content_size]();
+
 
     /* レスポンスの生成 */
     std::string quote_b64 = std::string(
         base64_encode<char, uint8_t>(quote_u8, quote_size));
+    std::string report_data_b64 = std::string(
+        base64_encode<char, uint8_t>(report_data_content, content_size));
+
+    /* MAAがURLセーフBase64を受理しているため、その変換を行う */
+    print_debug_message("Base64 encoded quote ->", DEBUG_LOG);
+    print_debug_message(quote_b64, DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    std::replace(quote_b64.begin(), quote_b64.end(), '+', '-');
+    std::replace(quote_b64.begin(), quote_b64.end(), '/', '_');
+    quote_b64.erase(
+        std::remove(quote_b64.begin(), quote_b64.end(), '='), quote_b64.end());
+
+    print_debug_message("URL-safe-Base64 encoded quote ->", DEBUG_LOG);
+    print_debug_message(quote_b64, DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    /* Report Dataの下位32ビット（つまりコンテンツのハッシュ値）を渡すのではなく、
+     * ハッシュ値に対応する元データの方を渡す点に注意 */
+    print_debug_message("Base64 encoded report data content ->",
+        DEBUG_LOG);
+    print_debug_message(report_data_b64, DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    std::replace(report_data_b64.begin(), report_data_b64.end(), '+', '-');
+    std::replace(report_data_b64.begin(), report_data_b64.end(), '/', '_');
+    report_data_b64.erase(std::remove(report_data_b64.begin(), 
+        report_data_b64.end(), '='), report_data_b64.end());
+
+    print_debug_message(
+        "URL-safe-Base64 encoded report data content ->", DEBUG_LOG);
+    print_debug_message(report_data_b64, DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
 
     json::JSON res_json_obj;
 
     res_json_obj["quote"] = quote_b64;
+    res_json_obj["runtimeData"]["data"] = report_data_b64;
+    res_json_obj["runtimeData"]["dataType"] = "Binary";
     response_json = res_json_obj.dump();
 
+
     memset(quote_u8, 0, quote_size);
-    memset(lower_report_data, 0, 32);
-    memset(report_data_hash, 0, 32);
     delete[] quote_u8;
-    delete[] lower_report_data;
-    delete[] report_data_hash;
 
     return 0;
 }
@@ -433,6 +506,7 @@ int main()
     }
 
     /* 設定情報の読み込み。in-procモード対応の実装時に使用 */
+    //setenv("SGX_AESM_ADDR", "0", 1); //in-proc
     //load_settings();
     
     /* サーバの起動（RAの実行） */

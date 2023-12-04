@@ -42,8 +42,22 @@ sgx_status_t ecall_create_report(
     //鍵交換実装時はここに両者の公開鍵の連結に対するハッシュ値を同梱する
     sgx_report_data_t report_data = {0};
 
-    sgx_status_t status = sgx_create_report(
+    //ここでは例として32バイトの0の羅列を対象とする
+    uint8_t *original_data = new uint8_t[32]();
+    uint8_t *data_hash = new uint8_t[32]();
+
+    sgx_status_t status = 
+        sgx_sha256_msg(original_data, 32, (sgx_sha256_hash_t*)data_hash);
+
+    if(status != SGX_SUCCESS) return status;
+
+    memcpy(&report_data, data_hash, 32);
+
+    status = sgx_create_report(
         qe3_target_info, &report_data, report);
+
+    delete[] original_data;
+    delete[] data_hash;
 
     return status;
 }

@@ -1,2 +1,3 @@
-settings.ini
+settings_server.ini
+settings_client.ini
 *.bak
