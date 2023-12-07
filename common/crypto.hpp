@@ -31,3 +31,6 @@ int cert_verify(X509_STORE *store, STACK_OF(X509) *chain);
 int sha256_verify(const uint8_t *msg, size_t msg_len,
     uint8_t *sig, size_t sig_size, EVP_PKEY *pkey, int *result);
 void cert_stack_free (STACK_OF(X509) *chain);
+
+EVP_PKEY* exp_rsa_pubkey_from_rawdata(uint8_t *rsa_modulus, 
+    size_t modulus_size, uint8_t *rsa_exponent, size_t exponent_size);

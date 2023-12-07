@@ -296,41 +296,6 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
     sgx_target_info_t qe3_target_info;
     quote3_error_t qe3_error;
 
-    /* in-procモード時はAEの呼び出しに関するセットアップを行う */
-    // qe3_error = sgx_qe_set_enclave_load_policy(SGX_QL_PERSISTENT);
-
-    // if(qe3_error != SGX_QL_SUCCESS)
-    // {
-    //     print_ql_status(qe3_error);
-    //     error_message = "Failed to set enclave load policy.";
-    //     print_debug_message(error_message, ERROR);
-
-    //     return -1;
-    // }
-
-    // if(sgx_ql_set_path(SGX_QL_PCE_PATH, g_settings.pce_path.c_str()) != SGX_QL_SUCCESS ||
-    //     sgx_ql_set_path(SGX_QL_QE3_PATH, g_settings.qe3_path.c_str()) != SGX_QL_SUCCESS ||
-    //     sgx_ql_set_path(SGX_QL_IDE_PATH, g_settings.ide_path.c_str()) != SGX_QL_SUCCESS)
-    // {
-    //     print_ql_status(qe3_error);
-    //     error_message = "Failed to set AE path.";
-    //     print_debug_message(error_message, ERROR);
-
-    //     return -1;
-    // }
-
-    // qe3_error = sgx_ql_set_path(SGX_QL_QPL_PATH, g_settings.qpl_path.c_str());
-
-    // if(qe3_error != SGX_QL_SUCCESS)
-    // {
-    //     print_ql_status(qe3_error);
-    //     error_message = "Failed to set QPL path.";
-    //     print_debug_message(error_message, ERROR);
-
-    //     return -1;
-    // }
-
-
     /* RAの一環であるQE3とのLAのため、QE3のTarget Infoを取得する */
     qe3_error = sgx_qe_get_target_info(&qe3_target_info);;
     
@@ -424,36 +389,17 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
 
     /* レスポンスの生成 */
     std::string quote_b64 = std::string(
-        base64_encode<char, uint8_t>(quote_u8, quote_size));
+        base64url_encode<char, uint8_t>(quote_u8, quote_size));
     std::string report_data_b64 = std::string(
-        base64_encode<char, uint8_t>(report_data_content, content_size));
+        base64url_encode<char, uint8_t>(report_data_content, content_size));
 
     /* MAAがURLセーフBase64を受理しているため、その変換を行う */
-    print_debug_message("Base64 encoded quote ->", DEBUG_LOG);
-    print_debug_message(quote_b64, DEBUG_LOG);
-    print_debug_message("", DEBUG_LOG);
-
-    std::replace(quote_b64.begin(), quote_b64.end(), '+', '-');
-    std::replace(quote_b64.begin(), quote_b64.end(), '/', '_');
-    quote_b64.erase(
-        std::remove(quote_b64.begin(), quote_b64.end(), '='), quote_b64.end());
-
     print_debug_message("URL-safe-Base64 encoded quote ->", DEBUG_LOG);
     print_debug_message(quote_b64, DEBUG_LOG);
     print_debug_message("", DEBUG_LOG);
 
-    /* Report Dataの下位32ビット（つまりコンテンツのハッシュ値）を渡すのではなく、
+    /* Report Dataの上位32ビット（つまりコンテンツのハッシュ値）を渡すのではなく、
      * ハッシュ値に対応する元データの方を渡す点に注意 */
-    print_debug_message("Base64 encoded report data content ->",
-        DEBUG_LOG);
-    print_debug_message(report_data_b64, DEBUG_LOG);
-    print_debug_message("", DEBUG_LOG);
-
-    std::replace(report_data_b64.begin(), report_data_b64.end(), '+', '-');
-    std::replace(report_data_b64.begin(), report_data_b64.end(), '/', '_');
-    report_data_b64.erase(std::remove(report_data_b64.begin(), 
-        report_data_b64.end(), '='), report_data_b64.end());
-
     print_debug_message(
         "URL-safe-Base64 encoded report data content ->", DEBUG_LOG);
     print_debug_message(report_data_b64, DEBUG_LOG);

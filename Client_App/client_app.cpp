@@ -19,6 +19,7 @@
 #include "../common/debug_print.hpp"
 #include "../common/hexutil.hpp"
 #include "../common/crypto.hpp"
+#include "../common/jwt_util.hpp"
 
 using namespace httplib;
 
@@ -199,9 +200,8 @@ int get_quote(std::string server_url,
 
 
 /* MAAにQuoteを送信し検証する */
-int send_quote_to_maa(std::string quote_json)
+int send_quote_to_maa(std::string quote_json, std::string &ra_report_jwt)
 {
-    //一通り最低限実装したら、キーペアを生成し公開鍵を送信する機能の実装が必要
     print_debug_message("==============================================", INFO);
     print_debug_message("Send Quote to MAA", INFO);
     print_debug_message("==============================================", INFO);
@@ -213,12 +213,11 @@ int send_quote_to_maa(std::string quote_json)
     std::string url_parts = "/attest/SgxEnclave?api-version=";
     url_parts += g_settings.maa_api_version;
 
-    //TODO: Quote JSONパースしバージョン整えてから送信
     auto res = client.Post(url_parts, quote_json, "application/json");
 
     if(res == NULL)
     {
-        std::string message = "Unknown error. Probably SGX server is down.";
+        std::string message = "Unknown error. Probably Attestation Provider is down.";
         print_debug_message(message, ERROR);
         exit(1);
     }
@@ -230,35 +229,60 @@ int send_quote_to_maa(std::string quote_json)
 
     if(res->status == 200)
     {
-        quote_json = res_json_obj.dump();
-
-        print_debug_message("Received Quote JSON ->", DEBUG_LOG);
-        print_debug_message(quote_json, DEBUG_LOG);
+        print_debug_message("Received RA report JWT ->", DEBUG_LOG);
+        print_debug_message(response_json, DEBUG_LOG);
         print_debug_message("", DEBUG_LOG);
     }
-    else if(res->status == 500)
+    else if(res->status == 400)
     {
-        char *error_message;
-        size_t error_message_size;
+        std::string status_code = "status code -> " + std::to_string(res->status);
+        print_debug_message(status_code, ERROR);
+        print_debug_message(res->body, ERROR);
+        print_debug_message("", ERROR);
 
-        error_message = base64_decode<char, char>(
-            (char*)res_json_obj["error_message"].ToString().c_str(), error_message_size);
-
-        print_debug_message(std::string(error_message), ERROR);
-
+        std::string message = "Probably Quote is compromised or invalid.";
+        print_debug_message(message, ERROR);
+        print_debug_message("", ERROR);
+        
         return -1;
     }
     else
     {
-        std::string message = "Unexpected error while getting quote.";
+        std::string message = "Unexpected error while getting RA report JWT.";
         print_debug_message(message, ERROR);
+        print_debug_message("", ERROR);
 
         std::string status_code = "status code -> " + std::to_string(res->status);
         print_debug_message(status_code, ERROR);
         print_debug_message(res->body, ERROR);
+        print_debug_message("", ERROR);
         
         return -1;
     }
+
+    ra_report_jwt = res_json_obj["token"].ToString();
+
+    return 0;
+}
+
+
+/* RA reportを検証しRAの受理判断を行う */
+int process_ra_report(std::string ra_report_jwt)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Verify JWT signature using JWK", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    /* 検証用のJWKの取得 */
+    std::string url_parts = "/certs";
+    std::string jwk;
+    int ret = get_jwk_online(g_settings.maa_url, url_parts, jwk);
+    if(ret) return -1;
+
+    /* JWTの署名を検証する */
+    ret = verify_jwt(ra_report_jwt, jwk);
+    if(ret) return -1;
 
     return 0;
 }
@@ -287,7 +311,13 @@ int do_RA(std::string server_url,
     if(ret) return -1;
 
     /* MAAにQuoteを送信し検証する */
-    ret = send_quote_to_maa(quote_json);
+    std::string ra_report_jwt;
+    ret = send_quote_to_maa(quote_json, ra_report_jwt);
+    if(ret) return -1;
+
+    /* RA reportの各種検証処理を実施しRAの受理判断を行う */
+    ret = process_ra_report(ra_report_jwt);
+    if(ret) return -1; //RA failed. 後で処理追記
 
     return 0;
 }

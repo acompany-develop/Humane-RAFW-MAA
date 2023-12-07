@@ -5,6 +5,7 @@
 #include <openssl/core_names.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
+#include <openssl/rsa.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/param_build.h>
@@ -563,7 +564,7 @@ int sha256_verify(
             break;
         }
 
-        if (EVP_DigestVerifyFinal(context, sig, sig_size) != 1) error_flag = 1;
+        if (EVP_DigestVerifyFinal(context, sig, sig_size) != 1) *result = 1;
 
     } while (false);
 
@@ -574,3 +575,62 @@ int sha256_verify(
 
 /* 証明書チェーンのスタックを解放 */
 void cert_stack_free(STACK_OF(X509) * chain) { sk_X509_free(chain); }
+
+
+/* バイナリ形式のモジュラスと指数からEVP形式のRSA公開鍵を生成 */
+EVP_PKEY* exp_rsa_pubkey_from_rawdata(uint8_t *rsa_modulus, 
+    size_t modulus_size, uint8_t *rsa_exponent, size_t exponent_size)
+{
+    BIGNUM *modulus_bn;
+    BIGNUM *exponent_bn;
+    EVP_PKEY *rsa_pkey = NULL;
+    EVP_PKEY_CTX *pkey_ctx;
+    OSSL_PARAM_BLD *param_build;
+    OSSL_PARAM *params = NULL;
+
+    try
+    {
+        pkey_ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
+        if(pkey_ctx == NULL) throw std::exception();
+
+        modulus_bn = BN_bin2bn(rsa_modulus, modulus_size, NULL);
+        exponent_bn = BN_bin2bn(rsa_exponent, exponent_size, NULL);
+
+        if(modulus_bn == NULL || exponent_bn == NULL)
+            throw std::exception();
+
+        param_build = OSSL_PARAM_BLD_new();
+        if(param_build == NULL) throw std::exception();
+
+        if(!OSSL_PARAM_BLD_push_BN(param_build, "n", modulus_bn))
+            throw std::exception();
+
+        if(!OSSL_PARAM_BLD_push_BN(param_build, "e", exponent_bn))
+            throw std::exception();
+
+        if(!OSSL_PARAM_BLD_push_BN(param_build, "d", NULL))
+            throw std::exception();
+
+        params = OSSL_PARAM_BLD_to_param(param_build);
+        if(params == NULL) throw std::exception();
+
+        if(EVP_PKEY_fromdata_init(pkey_ctx) <= 0)
+            throw std::exception();
+
+        if(EVP_PKEY_fromdata(pkey_ctx, 
+            &rsa_pkey, EVP_PKEY_PUBLIC_KEY, params) <= 0)
+            throw std::exception();
+    }
+    catch(...)
+    {
+        EVP_PKEY_free(rsa_pkey);
+    }
+
+    if(modulus_bn != NULL) BN_free(modulus_bn);
+    if(exponent_bn != NULL) BN_free(exponent_bn);
+    if(pkey_ctx != NULL) EVP_PKEY_CTX_free(pkey_ctx);
+    if(params != NULL) OSSL_PARAM_free(params);
+    if(param_build != NULL) OSSL_PARAM_BLD_free(param_build);
+
+    return rsa_pkey;
+}
