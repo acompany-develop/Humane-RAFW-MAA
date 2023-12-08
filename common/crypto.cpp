@@ -578,7 +578,7 @@ void cert_stack_free(STACK_OF(X509) * chain) { sk_X509_free(chain); }
 
 
 /* バイナリ形式のモジュラスと指数からEVP形式のRSA公開鍵を生成 */
-EVP_PKEY* exp_rsa_pubkey_from_rawdata(uint8_t *rsa_modulus, 
+EVP_PKEY* evp_rsa_pubkey_from_rawdata(uint8_t *rsa_modulus, 
     size_t modulus_size, uint8_t *rsa_exponent, size_t exponent_size)
 {
     BIGNUM *modulus_bn;

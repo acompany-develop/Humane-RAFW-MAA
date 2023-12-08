@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <string>
+#include <sstream>
+#include <iomanip>
 #include "hexutil.hpp"
 #include "debug_print.hpp"
 
@@ -24,41 +27,19 @@ int from_hexstring(uint8_t *dest, const void *vsrc, size_t len)
 }
 
 
-const char* to_hexstring(const void *vsrc, size_t len)
+char* to_hexstring(const uint8_t *buf, size_t size)
 {
-    const uint8_t *src = (const uint8_t*)vsrc;
-    uint8_t *buffer_pointer;
-    size_t buffer_size;
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
 
-    buffer_size = len * 2 + 1;
-
-    if(buffer_size >= hex_buffer_size)
+    for (size_t i = 0; i < size; ++i)
     {
-        size_t new_size = 1024 * (buffer_size / 1024);
-        if(buffer_size % 1024) new_size += 1024;
-
-        hex_buffer_size = new_size;
-        hex_buffer = (char*)realloc(hex_buffer, new_size);
-
-        if(hex_buffer == NULL)
-        {
-            std::string message = "Failed to allocate buffer for hex.";
-            print_debug_message(message, ERROR);
-            return "(out of memory)";
-        }
+        ss << std::setw(2) << static_cast<int>(buf[i]);
     }
 
-    for(int i = 0; buffer_pointer = (uint8_t*)hex_buffer; ++i)
-    {
-        *buffer_pointer = hex_table[src[i] >> 4];
-        ++buffer_pointer;
-        *buffer_pointer = hex_table[src[i] & 0xf];
-        ++buffer_pointer;
-    }
+    char *result = strdup(ss.str().c_str());
 
-    hex_buffer[len * 2] = 0;
-
-    return (const char*)hex_buffer;
+    return result;
 }
 
 

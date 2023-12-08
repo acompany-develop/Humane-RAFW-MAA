@@ -1,5 +1,6 @@
 #include <string>
 #include <sstream>
+#include <ctime>
 #include <openssl/evp.h>
 #include "../include/httplib.h"
 #include "../include/json.hpp"
@@ -56,7 +57,8 @@ int get_jwk_online(std::string base_url,
 
 
 /* JWKを用いてJWTの署名等を検証 */
-int verify_jwt(std::string ra_report_jwt, std::string jwk)
+int verify_jwt(std::string ra_report_jwt, 
+    std::string jwk, std::string issuer)
 {
     /* JWTをヘッダ、ペイロード、署名に分割 */
     std::string header, payload, signature = "";
@@ -177,7 +179,7 @@ int verify_jwt(std::string ra_report_jwt, std::string jwk)
     EVP_PKEY *rsa_pubkey;
 
     /* バイナリ形式のモジュラスと指数からEVP形式のRSA公開鍵を生成 */
-    rsa_pubkey = exp_rsa_pubkey_from_rawdata(
+    rsa_pubkey = evp_rsa_pubkey_from_rawdata(
         rsa_modulus, modulus_size, rsa_exponent, exponent_size);
 
     if(rsa_pubkey == NULL)
@@ -214,7 +216,57 @@ int verify_jwt(std::string ra_report_jwt, std::string jwk)
         return -1;
     }
 
-    print_debug_message("JWT signature matched. Proceed to next operation.", INFO);
+    print_debug_message("JWT signature matched.", INFO);
+    print_debug_message("", INFO);
+
+
+    /* JWT自体の各種メタデータの検証。まずはIssuerから */
+    if(payload_json["iss"].IsNull())
+    {
+        print_debug_message("Invalid JWT format. Issuer was not found", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+    else if(payload_json["iss"].ToString() != issuer)
+    {
+        print_debug_message("JWT Issuer mismatched.", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    print_debug_message("JWT issuer matched.", INFO);
+    print_debug_message("", INFO);
+
+    //タイムスタンプの検証
+    std::time_t timestamp = std::time(0);
+    uint64_t timestamp_min, timestamp_max;
+
+    if(payload_json["iat"].IsNull() || payload_json["exp"].IsNull())
+    {
+        print_debug_message("Invalid JWT format. timestamp was not found", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    timestamp_min = payload_json["iat"].ToInt();
+    timestamp_max = payload_json["exp"].ToInt();
+
+    if(timestamp < timestamp_min || timestamp > timestamp_max)
+    {
+        print_debug_message("JWT is expired or has illegal timestamp.", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    print_debug_message("JWT timestamp is valid.", INFO);
+    print_debug_message("", INFO);
+
+    print_debug_message(
+        "Received RA report JWT is valid. Proceed to next operation.", INFO);
     print_debug_message("", INFO);
 
     return 0;
