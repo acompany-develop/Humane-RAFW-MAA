@@ -415,6 +415,70 @@ int verify_enclave(std::string ra_report_jwt, std::string quote_json)
     print_debug_message("MRSIGNER matched.", INFO);
     print_debug_message("", INFO);
 
+
+    /* ISVSVNのチェック */
+    //要求値とQuote内の要素との比較
+    print_debug_message("Required ISVSVN ->", DEBUG_LOG);
+    print_debug_message(std::to_string(g_settings.min_isv_svn), DEBUG_LOG);
+    print_debug_message("ISVSVN from Quote ->", DEBUG_LOG);
+    print_debug_message(std::to_string(quote_isvsvn), DEBUG_LOG);
+
+    if(g_settings.min_isv_svn > quote_isvsvn)
+    {
+        print_debug_message("", ERROR);
+        print_debug_message("Insufficient ISVSVN. Reject RA.", ERROR);
+        print_debug_message("", ERROR);
+    }
+
+    print_debug_message("ISVSVN from MAA RA report ->", DEBUG_LOG);
+    print_debug_message(std::to_string(jwt_obj["x-ms-sgx-svn"].ToInt()), DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    //要求値とRA応答エントリ内の要素との比較
+    if(g_settings.min_isv_svn > jwt_obj["x-ms-sgx-svn"].ToInt())
+    {
+        print_debug_message("", ERROR);
+        print_debug_message("ISVSVN in the RA report is corrupted.", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    print_debug_message("ISVSVN validated.", INFO);
+    print_debug_message("", INFO);
+
+
+    /* ISV ProdIDのチェック */
+    //要求値とQuote内の要素との比較
+    print_debug_message("Required ISV ProdID ->", DEBUG_LOG);
+    print_debug_message(std::to_string(g_settings.req_isv_prod_id), DEBUG_LOG);
+    print_debug_message("ISV ProdID from Quote ->", DEBUG_LOG);
+    print_debug_message(std::to_string(quote_isvsvn), DEBUG_LOG);
+
+    if(g_settings.req_isv_prod_id != quote_isvprodid)
+    {
+        print_debug_message("", ERROR);
+        print_debug_message("ISV ProdID mismatched. Reject RA.", ERROR);
+        print_debug_message("", ERROR);
+    }
+
+    print_debug_message("ISV ProdID from MAA RA report ->", DEBUG_LOG);
+    print_debug_message(std::to_string(jwt_obj["x-ms-sgx-product-id"].ToInt()), DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    //要求値とRA応答エントリ内の要素との比較
+    if(g_settings.req_isv_prod_id != jwt_obj["x-ms-sgx-product-id"].ToInt())
+    {
+        print_debug_message("", ERROR);
+        print_debug_message("ISV ProdID in the RA report is corrupted.", ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    print_debug_message("ISV ProdID matched.", INFO);
+    print_debug_message("", INFO);
+
     return 0;
 }
 
@@ -440,6 +504,73 @@ int process_ra_report(std::string ra_report_jwt, std::string quote_json)
     /* サーバEnclaveの各種同一性の検証を行う */
     ret = verify_enclave(ra_report_jwt, quote_json);
     if(ret) return -1;
+
+    print_debug_message("-----------------------------", INFO);
+    print_debug_message("RA Accepted.", INFO);
+    print_debug_message("-----------------------------", INFO);
+    print_debug_message("", INFO);
+
+    return 0;
+}
+
+
+int send_ra_result(std::string server_url, 
+    std::string ra_ctx_b64, bool ra_result)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Send RA result to SGX server", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    std::string request_json;
+    json::JSON req_json_obj, res_json_obj;
+
+    req_json_obj["ra_context"] = ra_ctx_b64;
+    
+    if(ra_result == true)
+        req_json_obj["ra_result"] = std::string("true");
+    else
+        req_json_obj["ra_result"] = std::string("false");
+
+    request_json = req_json_obj.dump();
+
+    Client client(server_url);
+    auto res = client.Post("/ra-result", request_json, "application/json");
+
+    if(res == NULL)
+    {
+        std::string message = "Unknown error. Probably SGX server is down.";
+        print_debug_message(message, ERROR);
+        exit(1);
+    }
+
+    std::string response_json = res->body;
+    res_json_obj = json::JSON::Load(response_json);
+
+    if(res->status == 200)
+    {
+        print_debug_message("Sent RA result successfully.", DEBUG_LOG);
+        print_debug_message("", DEBUG_LOG);
+    }
+    else if(res->status == 500)
+    {
+        char *error_message;
+        size_t error_message_size;
+
+        error_message = base64_decode<char, char>(
+            (char*)res_json_obj["error_message"].ToString().c_str(), error_message_size);
+
+        print_debug_message(std::string(error_message), ERROR);
+
+        return -1;
+    }
+    else
+    {
+        std::string message = "Unexpected error while sending RA result.";
+        print_debug_message(message, ERROR);
+        
+        return -1;
+    }
 
     return 0;
 }
@@ -473,8 +604,13 @@ int do_RA(std::string server_url,
     if(ret) return -1;
 
     /* RA reportの各種検証処理を実施しRAの受理判断を行う */
+    bool ra_result = 1; //RA Accepted
     ret = process_ra_report(ra_report_jwt, quote_json);
-    if(ret) return -1; //RA failed. 後で処理追記
+    if(ret) ra_result = 0; //RA failed
+
+    /* RA受理判断結果の返信 */
+    ret = send_ra_result(server_url, ra_ctx_b64, ra_result);
+    if(!ra_result || ret) return -1;
 
     return 0;
 }

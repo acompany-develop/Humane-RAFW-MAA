@@ -34,6 +34,9 @@ int initialize_ra(sgx_enclave_id_t eid,
 int get_quote(sgx_enclave_id_t eid, std::string request_json, 
     std::string &response_json, std::string &error_message);
 
+int process_ra_result(sgx_enclave_id_t eid, std::string request_json, 
+    std::string &response_json, std::string &error_message);
+
 
 /* settingsファイルからロードした値を格納する構造体 */
 typedef struct server_settings_struct
@@ -108,6 +111,33 @@ void server_logics(sgx_enclave_id_t eid)
         print_debug_message("Quote JSON ->", DEBUG_LOG);
         print_debug_message(response_json, DEBUG_LOG);
         print_debug_message("", DEBUG_LOG);
+
+        if(!ret) res.status = 200;
+        else
+        {
+            /* 通信用にBase64化 */
+            char *error_message_b64;
+            error_message_b64 = base64_encode<char, char>(
+                (char*)error_message.c_str(), error_message.length());
+            
+            /* レスポンス用jsonを生成 */
+            json::JSON json_obj;
+            json_obj["error_message"] = std::string(error_message_b64);
+            response_json = json_obj.dump();
+
+            res.status = 500;
+        }
+
+        /* レスポンスを返信 */
+        res.set_content(response_json, "application/json");
+    });
+
+    svr.Post("/ra-result", [&](const Request& req, Response& res) {
+        std::string request_json = req.body; 
+        std::string response_json, error_message = "";
+
+        int ret = process_ra_result(eid, 
+            request_json, response_json, error_message);
 
         if(!ret) res.status = 200;
         else
@@ -293,6 +323,11 @@ int get_server_enclave_report(sgx_enclave_id_t eid,
 int get_quote(sgx_enclave_id_t eid, std::string request_json, 
     std::string &response_json, std::string &error_message)
 {
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Get Quote", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
     sgx_target_info_t qe3_target_info;
     quote3_error_t qe3_error;
 
@@ -416,6 +451,51 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
 
     memset(quote_u8, 0, quote_size);
     delete[] quote_u8;
+
+    return 0;
+}
+
+
+/* RA結果の処理 */
+int process_ra_result(sgx_enclave_id_t eid, std::string request_json, 
+    std::string &response_json, std::string &error_message)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Process RA result", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    json::JSON res_json_obj;
+    json::JSON req_json_obj = json::JSON::Load(request_json);
+    
+    //ra_ctxのデコード、結果処理本処理実装
+
+    if(req_json_obj["ra_result"].ToString() == "true")
+    {
+        print_debug_message("RA has been accepted by client.", INFO);
+        print_debug_message("", INFO);
+        //
+    }
+    else if(req_json_obj["ra_result"].ToString() == "false")
+    {
+        print_debug_message("RA has been rejected by client.", INFO);
+        print_debug_message("", INFO);
+        //
+    }
+    else
+    {
+        std::string error_message = "Invalid RA result format.";
+        print_debug_message(error_message, ERROR);
+        print_debug_message("", ERROR);
+
+        res_json_obj["error_message"] = error_message;
+        response_json = res_json_obj.dump();
+
+        return -1;
+    }
+
+    res_json_obj["msg"] = "ok";
+    response_json = res_json_obj.dump();
 
     return 0;
 }

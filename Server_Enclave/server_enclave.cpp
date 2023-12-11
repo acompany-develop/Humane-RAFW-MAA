@@ -13,7 +13,11 @@ typedef struct _ra_session_t
     uint32_t ra_context;
     sgx_ec256_public_t ec_pubkey;
     sgx_ec256_private_t ec_privkey;
+    sgx_ec256_public_t client_pubkey;
     uint8_t session_key[32];
+    uint8_t kdk[32];
+    uint8_t sk[32];
+    uint8_t mk[32];
 } ra_session_t;
 
 /* 全セッションを管理するためのグローバル変数 */
@@ -60,6 +64,13 @@ sgx_status_t ecall_create_report(
     delete[] data_hash;
 
     return status;
+}
+
+
+/* 共通鍵のSKとMKを生成する */
+sgx_status_t ecall_generate_shared_keys(uint32_t ra_ctx)
+{
+    return SGX_SUCCESS;
 }
 
 
