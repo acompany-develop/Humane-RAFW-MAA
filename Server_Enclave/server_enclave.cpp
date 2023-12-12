@@ -87,9 +87,5 @@ sgx_status_t ecall_destroy_ra_session(uint32_t ra_ctx)
     memset(&g_ra_sessions[ra_ctx].ec_privkey, 0, sizeof(sgx_ec256_private_t));
     memset(g_ra_sessions[ra_ctx].session_key, 0, 32);
 
-    std::string tmp = std::to_string(sizeof(sgx_ec256_public_t));
-
-    ocall_print(tmp.c_str(), tmp.length());
-
     return SGX_SUCCESS;
 }

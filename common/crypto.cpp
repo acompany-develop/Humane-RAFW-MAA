@@ -18,6 +18,7 @@
 #include <iostream>
 
 #define PKEY_ECDSA_256_PUBKEY_LENGTH 65
+#define SGX_ECP256_KEY_SIZE 32
 
 /* このソースコードの関数向けの初期化（事前処理） */
 void crypto_init()

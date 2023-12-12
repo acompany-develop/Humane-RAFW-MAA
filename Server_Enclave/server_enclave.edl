@@ -17,6 +17,9 @@ enclave
         
         /* 共通鍵のSKとMKを生成する */
         public sgx_status_t ecall_generate_shared_keys(uint32_t ra_ctx);
+
+        /* RAセッションのデストラクト */
+        public sgx_status_t ecall_destroy_ra_session(uint32_t ra_ctx);
     };
 
     /* OCALLのプロトタイプを記述 */

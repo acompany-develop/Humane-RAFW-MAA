@@ -3,7 +3,12 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
-#include <sgx_key_exchange.h>
+
+typedef struct _sgx_ec256_public_t
+{
+    uint8_t gx[32];
+    uint8_t gy[32];
+} sgx_ec256_public_t;
 
 void crypto_init();
 

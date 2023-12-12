@@ -616,6 +616,30 @@ int do_RA(std::string server_url,
 }
 
 
+void destruct_ra_context(std::string server_url, std::string ra_ctx_b64)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Destruct RA", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+    
+    json::JSON req_json_obj;
+    std::string request_json;
+
+    req_json_obj["ra_context"] = ra_ctx_b64;
+
+    Client client(server_url);
+
+    request_json = req_json_obj.dump();
+
+    /* 計算に使用する暗号データを送信 */
+    auto res = client.Post("/destruct-ra", request_json, "application/json");
+
+    print_debug_message("Sent RA destruction request to ISV.", INFO);
+    print_debug_message("", INFO);
+}
+
+
 void main_process()
 {
     /* 設定ファイルからの設定の読み取り */
@@ -646,6 +670,9 @@ void main_process()
 
     // free(sk);
     // free(mk);
+
+    /* RAコンテキストの破棄 */
+    destruct_ra_context(server_url, ra_ctx_b64);
 }
 
 

@@ -37,6 +37,8 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
 int process_ra_result(sgx_enclave_id_t eid, std::string request_json, 
     std::string &response_json, std::string &error_message);
 
+void destruct_ra_context(sgx_enclave_id_t eid, std::string request_json);
+
 
 /* settingsファイルからロードした値を格納する構造体 */
 typedef struct server_settings_struct
@@ -156,6 +158,20 @@ void server_logics(sgx_enclave_id_t eid)
         }
 
         /* レスポンスを返信 */
+        res.set_content(response_json, "application/json");
+    });
+
+    svr.Post("/destruct-ra", [&](const Request& req, Response& res) {
+        std::string request_json = req.body;
+        std::string response_json, error_message = "";
+
+        destruct_ra_context(eid, request_json);
+
+        res.status = 200;
+        json::JSON res_json_obj;
+        res_json_obj["message"] = std::string("OK");
+        response_json = res_json_obj.dump();
+
         res.set_content(response_json, "application/json");
     });
 
@@ -469,18 +485,24 @@ int process_ra_result(sgx_enclave_id_t eid, std::string request_json,
     json::JSON req_json_obj = json::JSON::Load(request_json);
     
     //ra_ctxのデコード、結果処理本処理実装
+    uint32_t ra_ctx = -1;
+    size_t tmp;
+
+    ra_ctx = std::stoi(std::string(base64_decode<char, char>(
+        (char*)req_json_obj["ra_context"].ToString().c_str(), tmp)));
 
     if(req_json_obj["ra_result"].ToString() == "true")
     {
         print_debug_message("RA has been accepted by client.", INFO);
         print_debug_message("", INFO);
-        //
     }
     else if(req_json_obj["ra_result"].ToString() == "false")
     {
         print_debug_message("RA has been rejected by client.", INFO);
         print_debug_message("", INFO);
-        //
+        
+        sgx_status_t status, retval;
+        status = ecall_destroy_ra_session(eid, &retval, ra_ctx);
     }
     else
     {
@@ -498,6 +520,43 @@ int process_ra_result(sgx_enclave_id_t eid, std::string request_json,
     response_json = res_json_obj.dump();
 
     return 0;
+}
+
+
+/* クライアントから受信したRAコンテキストのRAを破棄 */
+void destruct_ra_context(sgx_enclave_id_t eid, std::string request_json)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Destruct RA", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    json::JSON req_json_obj= json::JSON::Load(request_json);
+    size_t tmpsz;
+
+    std::string ra_ctx_str = std::string(base64_decode<char, char>(
+        (char*)req_json_obj["ra_context"].ToString().c_str(), tmpsz));
+
+    uint32_t ra_ctx;
+    sgx_status_t retval;
+    
+    try
+    {
+        ra_ctx = std::stoi(ra_ctx_str);
+    }
+    catch(...)
+    {
+        print_debug_message("Invalid RA context format.", ERROR);
+        return;
+    }
+
+    ecall_destroy_ra_session(eid, &retval, ra_ctx);
+
+    print_debug_message("Destructed following RA context -> ", INFO);
+    print_debug_message(ra_ctx_str, INFO);
+    print_debug_message("", INFO);
+
+    return;
 }
 
 
