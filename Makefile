@@ -115,8 +115,8 @@ App_Cpp_Flags := $(App_C_Flags) -std=c++11 -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_
 
 ## リンクオプション
 App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) \
-            		-Wl,--whole-archive  -lsgx_uswitchless -Wl,--no-whole-archive \
-					-lsgx_ukey_exchange -lsgx_dcap_ql -ldcap_quoteprov \
+            		-Wl,--whole-archive -lsgx_uswitchless -Wl,--no-whole-archive \
+					-lsgx_ukey_exchange -lsgx_dcap_ql -ldcap_quoteprov -lsgx_tcrypto \
 					-l$(Urts_Library_Name) -lpthread -lcrypto -lssl
 
 ## シミュレーションモードの場合は専用のライブラリを紐付ける

@@ -24,11 +24,22 @@
 using namespace httplib;
 
 
+/* 双方のセッション公開鍵の連結に対する署名に使用するための
+ * 256bit ECDSA秘密鍵。RA中に生成するセッション鍵とは別物。 */
+static const uint8_t client_signature_private_key[32] = {
+    0xef, 0x5c, 0x38, 0xb7, 0x6d, 0x4e, 0xed, 0xce,
+    0xde, 0x3b, 0x77, 0x2d, 0x1b, 0x8d, 0xa7, 0xb9,
+    0xef, 0xdd, 0x60, 0xd1, 0x22, 0x50, 0xcc, 0x90,
+    0xc3, 0xb5, 0x17, 0x54, 0xdc, 0x2f, 0xe5, 0x18
+};
+
+
 /* settingsファイルからロードした値を格納する構造体 */
 typedef struct client_settings_struct
 {
     std::string maa_url;
     std::string maa_api_version;
+    uint32_t client_id;
     uint16_t min_isv_svn;
     uint16_t req_isv_prod_id;
     std::string req_mrenclave;
@@ -68,12 +79,24 @@ std::string load_from_ini(std::string section, std::string key)
 /* 設定情報の読み込み */
 void load_settings()
 {
-    g_settings.maa_url = load_from_ini("client", "MAA_URL");
-    g_settings.maa_api_version = load_from_ini("client", "MAA_API_VERSION");
-    g_settings.min_isv_svn = std::stoi(load_from_ini("client", "MINIMUM_ISVSVN"));
-    g_settings.req_isv_prod_id = std::stoi(load_from_ini("client", "REQUIRED_ISV_PROD_ID"));
-    g_settings.req_mrenclave = load_from_ini("client", "REQUIRED_MRENCLAVE");
-    g_settings.req_mrsigner = load_from_ini("client", "REQUIRED_MRSIGNER");
+    try
+    {
+        g_settings.maa_url = load_from_ini("client", "MAA_URL");
+        g_settings.maa_api_version = load_from_ini("client", "MAA_API_VERSION");
+        g_settings.client_id = std::stoi(load_from_ini("client", "CLIENT_ID"));
+        g_settings.min_isv_svn = std::stoi(load_from_ini("client", "MINIMUM_ISVSVN"));
+        g_settings.req_isv_prod_id = std::stoi(load_from_ini("client", "REQUIRED_ISV_PROD_ID"));
+        g_settings.req_mrenclave = load_from_ini("client", "REQUIRED_MRENCLAVE");
+        g_settings.req_mrsigner = load_from_ini("client", "REQUIRED_MRSIGNER");
+    }
+    catch(...)
+    {
+        print_debug_message(
+            "Invalid setting. Probably non-integer value was set illegally.", ERROR);
+        print_debug_message("", ERROR);
+
+        exit(1);
+    }
     
     uint32_t skip_flag = std::stoi(load_from_ini("client", "SKIP_MRENCLAVE_CHECK"));
 
@@ -97,8 +120,19 @@ int initialize_ra(std::string server_url, std::string &ra_ctx_b64)
     print_debug_message("==============================================", INFO);
     print_debug_message("", INFO);
 
+    json::JSON req_json_obj;
+
+    std::string client_id_str = std::to_string(g_settings.client_id);
+
+    std::string client_id_b64 = std::string(
+        base64_encode<char, char>((char*)client_id_str.c_str(), 
+            client_id_str.length()));
+    
+    req_json_obj["client_id"] = client_id_b64;
+    std::string request_json = req_json_obj.dump();
+
     Client client(server_url);
-    auto res = client.Get("/init-ra");
+    auto res = client.Post("/init-ra", request_json, "application/json");
 
     if(res == NULL)
     {
@@ -665,6 +699,9 @@ void main_process()
     {
         std::string message = "RA failed. Clean up and exit program.";
         print_debug_message(message, ERROR);
+
+        destruct_ra_context(server_url, ra_ctx_b64);
+        
         exit(0);
     }
 

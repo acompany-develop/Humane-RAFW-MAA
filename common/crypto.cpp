@@ -108,7 +108,7 @@ uint8_t *derive_shared_secret(EVP_PKEY *Ga, EVP_PKEY *Gb, size_t &secret_len)
 }
 
 /* EVP形式のECDSA-256bit公開鍵をsgx_ec256_public_tに変換 */
-int evp_pubkey_to_sgx_ec256(sgx_ec256_public_t *sgx_pubkey, EVP_PKEY *pkey)
+int evp_pubkey_to_sgx_ec256(client_sgx_ec256_public_t *sgx_pubkey, EVP_PKEY *pkey)
 {
     /* uint8_t配列に変換 */
     int pkey_len;
@@ -152,7 +152,7 @@ int evp_pubkey_to_sgx_ec256(sgx_ec256_public_t *sgx_pubkey, EVP_PKEY *pkey)
 }
 
 /* sgx_ec256_public_tからEVP_PKEY公開鍵に変換 */
-EVP_PKEY *evp_pubkey_from_sgx_ec256(sgx_ec256_public_t *sgx_pubkey)
+EVP_PKEY *evp_pubkey_from_sgx_ec256(client_sgx_ec256_public_t *sgx_pubkey)
 {
     EVP_PKEY_CTX *pkey_ctx;
     EVP_PKEY *pkey = NULL;

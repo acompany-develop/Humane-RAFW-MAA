@@ -4,19 +4,20 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
-typedef struct _sgx_ec256_public_t
+//sgx_ec256_public_tのクライアント用定義
+typedef struct _client_sgx_ec256_public_t
 {
     uint8_t gx[32];
     uint8_t gy[32];
-} sgx_ec256_public_t;
+} client_sgx_ec256_public_t;
 
 void crypto_init();
 
 EVP_PKEY* evp_pkey_generate();
 uint8_t* derive_shared_secret(EVP_PKEY *Ga, EVP_PKEY *Gb, size_t &secret_len);
 
-int evp_pubkey_to_sgx_ec256(sgx_ec256_public_t *sgx_pubkey, EVP_PKEY *pkey);
-EVP_PKEY* evp_pubkey_from_sgx_ec256(sgx_ec256_public_t *sgx_pubkey);
+int evp_pubkey_to_sgx_ec256(client_sgx_ec256_public_t *sgx_pubkey, EVP_PKEY *pkey);
+EVP_PKEY* evp_pubkey_from_sgx_ec256(client_sgx_ec256_public_t *sgx_pubkey);
 EVP_PKEY* evp_private_key_from_bytes(const uint8_t buf[32]);
 
 int aes_128bit_cmac(uint8_t key[16],

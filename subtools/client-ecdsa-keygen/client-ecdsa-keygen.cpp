@@ -127,7 +127,7 @@ int main()
     EVP_PKEY_print_private(out, pkey, 0, NULL);
 
 	/* 公開鍵をsgx_ec256_public_tに変換(リトルエンディアン化) */
-	sgx_ec256_public_t sgx_pubkey; //型はcrypto.hppで定義
+	client_sgx_ec256_public_t sgx_pubkey; //型はcrypto.hppで定義
     if(evp_pubkey_to_sgx_ec256(&sgx_pubkey, pkey) != 0)
 	{
 		std::cerr << "Failed to convert pubkey to sgx_ec256_public_t." << std::endl;

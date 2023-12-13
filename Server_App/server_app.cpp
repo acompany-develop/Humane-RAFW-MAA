@@ -6,6 +6,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <sgx_urts.h>
+#include <sgx_tcrypto.h>
 #include <sgx_uswitchless.h>
 #include <sgx_dcap_ql_wrapper.h>
 #include <sgx_pce.h>
@@ -28,7 +29,7 @@ using namespace httplib;
 /* プロトタイプ宣言 */
 int initialize_enclave(sgx_enclave_id_t &eid);
 
-int initialize_ra(sgx_enclave_id_t eid, 
+int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
     std::string &response_json, std::string &error_message);
 
 int get_quote(sgx_enclave_id_t eid, std::string request_json, 
@@ -75,14 +76,25 @@ void ocall_print_status(sgx_status_t st)
 }
 
 
+/* バイナリを標準出力する確認用関数 */
+void ocall_print_binary(uint8_t *buf, size_t sz)
+{
+    BIO_dump_fp(stdout, (char*)buf, sz);
+    return;
+}
+
+
 /* サーバの実行定義。RA含む各処理はここで完結する */
 void server_logics(sgx_enclave_id_t eid)
 {
     Server svr;
 
-    svr.Get("/init-ra", [&](const Request& req, Response& res) {
+    svr.Post("/init-ra", [&](const Request& req, Response& res) {
         std::string response_json, error_message = "";
-        int ret = initialize_ra(eid, response_json, error_message);
+        std::string request_json = req.body;
+
+        int ret = initialize_ra(eid, 
+            request_json, response_json, error_message);
 
         if(!ret) res.status = 200;
         else
@@ -266,7 +278,7 @@ void load_settings()
 
 
 /* sgx_ra_context_t相当のRAセッション識別子の初期化を行う */
-int initialize_ra(sgx_enclave_id_t eid, 
+int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
     std::string &response_json, std::string &error_message)
 {
     uint32_t ra_ctx = -1; //EPID-RAのsgx_ra_context_t相当
@@ -278,12 +290,50 @@ int initialize_ra(sgx_enclave_id_t eid,
     print_debug_message("==============================================", INFO);
     print_debug_message("", INFO);
 
-    status = ecall_init_ra(eid, &retval, &ra_ctx);
+    json::JSON req_json_obj = json::JSON::Load(request_json);
+    uint32_t client_id = -1;
+    size_t tmpsz;
+
+    /* Client ID（署名検証鍵インデックス）のパース */
+    std::string client_id_b64 = std::string(base64_decode<char, char>(
+        (char*)req_json_obj["client_id"].ToString().c_str(), tmpsz));
+
+    try
+    {
+        client_id = std::stoi(client_id_b64);
+    }
+    catch(...)
+    {
+        error_message = "Invalid client ID format.";
+        print_debug_message(error_message, ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    /* クライアントに返すセッション公開鍵のガワの準備 */
+    sgx_ec256_public_t Ga;
+
+    if(SGX_ECP256_KEY_SIZE != 32)
+    {
+        error_message = "Internal key size error.";
+        print_debug_message(error_message, ERROR);
+        print_debug_message("", ERROR);
+
+        return -1;
+    }
+
+    memset(&Ga.gx, 0, SGX_ECP256_KEY_SIZE);
+    memset(&Ga.gy, 0, SGX_ECP256_KEY_SIZE);
+
+    status = ecall_init_ra(eid, &retval, client_id, &ra_ctx, &Ga);
 
     if(status != SGX_SUCCESS)
     {
         error_message = "Failed to initialize RA.";
         print_sgx_status(status);
+        print_debug_message(error_message, ERROR);
+        print_debug_message("", ERROR);
 
         return -1;
     }
