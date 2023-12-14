@@ -8,6 +8,7 @@
 #include <sgx_urts.h>
 #include <sgx_tcrypto.h>
 #include <sgx_uswitchless.h>
+#include <sgx_ukey_exchange.h>
 #include <sgx_dcap_ql_wrapper.h>
 #include <sgx_pce.h>
 #include <sgx_quote_3.h>
@@ -37,6 +38,9 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
 
 int process_ra_result(sgx_enclave_id_t eid, std::string request_json, 
     std::string &response_json, std::string &error_message);
+
+int sample_addition(sgx_enclave_id_t eid, std::string request_json,
+    std::string &response_json, std::string error_message);
 
 void destruct_ra_context(sgx_enclave_id_t eid, std::string request_json);
 
@@ -170,6 +174,36 @@ void server_logics(sgx_enclave_id_t eid)
         }
 
         /* レスポンスを返信 */
+        res.set_content(response_json, "application/json");
+    });
+
+    /* リモート計算処理テスト（受信した秘密情報のEnclave内での加算） */
+    svr.Post("/sample-addition", [&eid](const Request& req, Response& res)
+    {
+        std::string request_json = req.body;
+        std::string response_json, error_message = "";
+
+        int ret = sample_addition(eid, request_json,
+            response_json, error_message);
+
+        if(!ret) res.status = 200;
+        else
+        {
+            json::JSON res_json_obj;
+            char *error_message_b64;
+
+            error_message_b64 = base64_encode<char, char>(
+                (char*)error_message.c_str(), error_message.length());
+            
+            res_json_obj["error_message"] = std::string(error_message_b64);
+            response_json = res_json_obj.dump();
+
+            res.status = 500;
+        }
+
+        print_debug_message("send the result response to SP.", INFO);
+        print_debug_message("", INFO);
+
         res.set_content(response_json, "application/json");
     });
 
@@ -338,6 +372,12 @@ int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
         return -1;
     }
 
+    print_debug_binary("Server's session pubkey G_a", 
+        (uint8_t*)&Ga, sizeof(Ga), DEBUG_LOG);
+    
+    print_debug_binary("x-coordinate of G_a", Ga.gx, 32, DEBUG_LOG);
+    print_debug_binary("y-coordinate of G_a", Ga.gy, 32, DEBUG_LOG);
+
     std::string ra_ctx_str;
     char *ra_ctx_b64;
 
@@ -348,6 +388,19 @@ int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
     /* レスポンス用JSONの作成 */
     json::JSON res_json_obj;
     res_json_obj["ra_context"] = std::string(ra_ctx_b64);
+    res_json_obj["g_a"]["gx"] = 
+        std::string((char*)base64_encode<char, uint8_t>(Ga.gx, 32));
+    res_json_obj["g_a"]["gy"] = 
+        std::string((char*)base64_encode<char, uint8_t>(Ga.gy, 32));
+    
+    print_debug_message("Base64-encoded x-coordinate of Ga ->", DEBUG_LOG);
+    print_debug_message(res_json_obj["g_a"]["gx"].ToString(), DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    print_debug_message("Base64-encoded y-coordinate of Ga ->", DEBUG_LOG);
+    print_debug_message(res_json_obj["g_a"]["gy"].ToString(), DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
     response_json = res_json_obj.dump();
 
     return 0;
@@ -355,13 +408,13 @@ int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
 
 
 /* Quoteの素材とする、ServerのEnclaveのReport構造体の取得 */
-int get_server_enclave_report(sgx_enclave_id_t eid,
+int get_server_enclave_report(sgx_enclave_id_t eid, uint32_t ra_ctx,
     sgx_target_info_t qe3_target_info, sgx_report_t &report)
 {
     sgx_status_t status, retval;
 
     status = ecall_create_report(eid, &retval, 
-        &qe3_target_info, &report);
+        ra_ctx, &qe3_target_info, &report);
 
     if(status != SGX_SUCCESS)
     {
@@ -385,10 +438,87 @@ int get_server_enclave_report(sgx_enclave_id_t eid,
 }
 
 
-/* Quoteの取得 */
+/* セッションキーの処理をしQuoteを取得 */
 int get_quote(sgx_enclave_id_t eid, std::string request_json, 
     std::string &response_json, std::string &error_message)
 {
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Generate and validate session keys", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    json::JSON req_json_obj = json::JSON::Load(request_json);
+    size_t tmpsz;
+
+    std::string ra_ctx_str = std::string(base64_decode<char, char>(
+        (char*)req_json_obj["ra_context"].ToString().c_str(), tmpsz));
+
+    uint32_t ra_ctx;
+    
+    try
+    {
+        ra_ctx = std::stoi(ra_ctx_str);
+    }
+    catch(...)
+    {
+        print_debug_message("Invalid RA context format.", ERROR);
+        return -1;
+    }
+
+    std::string client_id_str = std::string(base64_decode<char, char>(
+        (char*)req_json_obj["client_id"].ToString().c_str(), tmpsz));
+
+    uint32_t client_id;
+    
+    try
+    {
+        client_id = std::stoi(client_id_str);
+    }
+    catch(...)
+    {
+        print_debug_message("Invalid RA context format.", ERROR);
+        return -1;
+    }
+
+    sgx_ec256_public_t Gb;
+    sgx_ec256_signature_t sigsp;
+    
+    /* クライアントの公開鍵Gb */
+    memcpy(Gb.gx, base64_decode<uint8_t, char>(
+        (char*)req_json_obj["g_b"]["gx"].ToString().c_str(), tmpsz), 32);
+    memcpy(Gb.gy, base64_decode<uint8_t, char>(
+        (char*)req_json_obj["g_b"]["gy"].ToString().c_str(), tmpsz), 32);
+
+    /* Gb_Gaに対するECDSA署名であるSigSP */
+    memcpy(sigsp.x, base64_decode<uint8_t, char>(
+        (char*)req_json_obj["sigsp"]["x"].ToString().c_str(), tmpsz), 32);
+    memcpy(sigsp.y, base64_decode<uint8_t, char>(
+        (char*)req_json_obj["sigsp"]["y"].ToString().c_str(), tmpsz), 32);
+    
+    sgx_status_t status, retval;
+
+    /* 交換した公開鍵の署名を検証し共通鍵生成 */
+    status = ecall_process_session_keys(eid, &retval, ra_ctx, client_id, &Gb, &sigsp);
+
+    if(status != SGX_SUCCESS)
+    {
+        print_sgx_status(status);
+        error_message = "Failed to generate shared keys.";
+        print_debug_message(error_message, ERROR);
+
+        return -1;
+    }
+
+    if(retval != SGX_SUCCESS)
+    {
+        print_sgx_status(retval);
+        error_message = "Failed to generate shared keys.";
+        print_debug_message(error_message, ERROR);
+
+        return -1;
+    }
+    
+
     print_debug_message("==============================================", INFO);
     print_debug_message("Get Quote", INFO);
     print_debug_message("==============================================", INFO);
@@ -417,7 +547,7 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
     sgx_report_t report = {0};
     memset(&report, 0, sizeof(sgx_report_t));
 
-    int ret = get_server_enclave_report(eid, qe3_target_info, report);
+    int ret = get_server_enclave_report(eid, ra_ctx, qe3_target_info, report);
 
     if(ret) return -1;
 
@@ -483,7 +613,7 @@ int get_quote(sgx_enclave_id_t eid, std::string request_json,
     print_debug_binary("first 32 bytes of report data",
         quote->report_body.report_data.d, 32, DEBUG_LOG);
 
-    //この変数は鍵交換する場合は公開鍵の連結とする
+    //ダミー変数。この部分はクライアント側で置換する
     int content_size = 32;
     uint8_t *report_data_content = new uint8_t[content_size]();
 
@@ -567,6 +697,84 @@ int process_ra_result(sgx_enclave_id_t eid, std::string request_json,
     }
 
     res_json_obj["msg"] = "ok";
+    response_json = res_json_obj.dump();
+
+    return 0;
+}
+
+
+/* SPから受信した2値をEnclave内で復号し加算して結果を返却 */
+int sample_addition(sgx_enclave_id_t eid, std::string request_json,
+    std::string &response_json, std::string error_message)
+{
+    print_debug_message("==============================================", INFO);
+    print_debug_message("Sample Addition", INFO);
+    print_debug_message("==============================================", INFO);
+    print_debug_message("", INFO);
+
+    json::JSON req_json_obj= json::JSON::Load(request_json);
+
+    uint8_t *cipher1, *cipher2;
+    uint8_t *iv, *tag1, *tag2;
+    size_t cipher1_len, cipher2_len, tmpsz;
+    uint32_t ra_ctx;
+
+    ra_ctx = std::stoi(base64_decode<char, char>
+        ((char*)req_json_obj["ra_context"].ToString().c_str(), tmpsz));
+
+    cipher1 = base64_decode<uint8_t, char>
+        ((char*)req_json_obj["cipher1"].ToString().c_str(), cipher1_len);
+    
+    cipher2 = base64_decode<uint8_t, char>
+        ((char*)req_json_obj["cipher2"].ToString().c_str(), cipher2_len);
+
+    iv = base64_decode<uint8_t, char>
+        ((char*)req_json_obj["iv"].ToString().c_str(), tmpsz);
+
+    tag1 = base64_decode<uint8_t, char>
+        ((char*)req_json_obj["tag1"].ToString().c_str(), tmpsz);
+    
+    tag2 = base64_decode<uint8_t, char>
+        ((char*)req_json_obj["tag2"].ToString().c_str(), tmpsz);
+    
+    sgx_status_t status, retval;
+    uint8_t *result, *iv_result, *tag_result;
+    size_t result_len;
+
+    iv_result = new uint8_t[12]();
+    tag_result = new uint8_t[16]();
+
+    /* 結果用バッファサイズは決め打ち。uint64_t同士の加算であるため、
+     * 本来は10バイトもあれば十分である。
+     * 行儀よくやるのであれば、サイズ把握用の関数を用意するのが良いが、
+     * 事実上二重処理になるため、行う処理の重さと相談する */
+    result = new uint8_t[32]();
+
+    /* ECALLを行い秘密計算による加算を実行 */
+    print_debug_message("Invoke ECALL for addition.", DEBUG_LOG);
+    print_debug_message("", DEBUG_LOG);
+
+    status = ecall_sample_addition(eid, &retval, ra_ctx, cipher1,
+        cipher1_len, cipher2, cipher2_len, iv, tag1, tag2, 
+        result, &result_len, iv_result, tag_result);
+
+    if(status != SGX_SUCCESS)
+    {
+        error_message = "Failed to complete sample addition ECALL.";   
+        return -1;
+    }
+
+    json::JSON res_json_obj;
+
+    res_json_obj["cipher"] = std::string(
+        base64_encode<char, uint8_t>(result, result_len));
+
+    res_json_obj["iv"] = std::string(
+        base64_encode<char, uint8_t>(iv_result, 12));
+
+    res_json_obj["tag"] = std::string(
+        base64_encode<char, uint8_t>(tag_result, 16));
+
     response_json = res_json_obj.dump();
 
     return 0;

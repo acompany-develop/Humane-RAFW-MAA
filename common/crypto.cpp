@@ -197,8 +197,6 @@ EVP_PKEY *evp_pubkey_from_sgx_ec256(client_sgx_ec256_public_t *sgx_pubkey)
         delete[] tmp_gx;
         delete[] tmp_gy;
 
-        BIO_dump_fp(stdout, pubkey, pubkey_size);
-
         if (!OSSL_PARAM_BLD_push_octet_string(param_bld, "pub", pubkey, pubkey_size))
             throw std::exception();
 
@@ -389,9 +387,7 @@ int ecdsa_sign(uint8_t *message, size_t message_len, EVP_PKEY *pkey, uint8_t r[3
 
         if (!EVP_DigestSignFinal(md_ctx, signature, &sig_len)) throw std::exception();
 
-        BIO_dump_fp(stdout, signature, sig_len);
-
-        /* 上記出力結果はASN.1形式であるため、生の署名値r,sに変換する */
+        /* ASN.1形式から生の署名値r,sに変換する */
         const uint8_t *sig_ptr = signature;
         ECDSA_SIG *ecdsa_sig = d2i_ECDSA_SIG(NULL, &sig_ptr, sig_len);
 
