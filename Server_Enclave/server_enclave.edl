@@ -18,9 +18,6 @@ enclave
             [in]sgx_target_info_t *qe3_target_info,
             [out]sgx_report_t *report);
         
-        /* 共通鍵のSKとMKを生成する */
-        public sgx_status_t ecall_generate_shared_keys(uint32_t ra_ctx);
-
         /* RAセッションのデストラクト */
         public sgx_status_t ecall_destroy_ra_session(uint32_t ra_ctx);
 

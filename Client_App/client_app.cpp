@@ -405,7 +405,6 @@ int get_quote(std::string server_url, std::string ra_ctx_b64,
     ra_session_t ra_keys, client_sgx_ec256_signature_t sigsp, 
     std::string &quote_json)
 {
-    //一通り最低限実装したら、キーペアを生成し公開鍵を送信する機能の実装が必要
     print_debug_message("==============================================", INFO);
     print_debug_message("Get Quote", INFO);
     print_debug_message("==============================================", INFO);
@@ -779,8 +778,7 @@ int verify_enclave(std::string ra_report_jwt,
 
     /* Report DataがGa||Gb||VKに対するハッシュ値であるかを確認する。
      * MAAに送信したQuoteでこれが食い違っているとエラー400が来るため、
-     * ここではMAAのJWTエントリは検証しなくてよい。
-     */
+     * ここではMAAのJWTエントリは検証しなくてよい。 */
     //VKの生成
     aes_128bit_cmac(ra_keys.kdk, 
     (uint8_t*)("\x01VK\x00\x80\x00"), 6, ra_keys.vk);

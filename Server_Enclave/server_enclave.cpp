@@ -236,13 +236,6 @@ sgx_status_t ecall_create_report(uint32_t ra_ctx,
 }
 
 
-/* 共通鍵のSKとMKを生成する */
-sgx_status_t ecall_generate_shared_keys(uint32_t ra_ctx)
-{
-    return SGX_SUCCESS;
-}
-
-
 /* 指定したRAセッションを破棄する */
 sgx_status_t ecall_destroy_ra_session(uint32_t ra_ctx)
 {

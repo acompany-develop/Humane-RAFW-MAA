@@ -275,42 +275,6 @@ int initialize_enclave(sgx_enclave_id_t &eid)
 }
 
 
-/* iniファイルから読み込み、失敗時にはプログラムを即時終了する */
-std::string load_from_ini(std::string section, std::string key)
-{
-    mINI::INIFile file("settings_server.ini");
-    mINI::INIStructure ini;
-
-    if(!file.read(ini))
-    {
-        std::string message = "file read error";
-        print_debug_message(message, ERROR);
-        exit(1);
-    }
-    std::string ret = ini.get(section).get(key);
-
-    if(ret.length() == 0)
-    {
-        std::string message = "Failed to load setting " 
-            + key + " from settings_server.ini.";
-        print_debug_message(message, ERROR);
-        exit(1); 
-    }
-
-    return ret;
-}
-
-
-/* 設定情報の読み込み */
-void load_settings()
-{
-    g_settings.pce_path = load_from_ini("server", "PCE_PATH");
-    g_settings.qe3_path = load_from_ini("server", "QE3_PATH");
-    g_settings.ide_path = load_from_ini("server", "IDE_PATH");
-    g_settings.qpl_path = load_from_ini("server", "QPL_PATH");
-}
-
-
 /* sgx_ra_context_t相当のRAセッション識別子の初期化を行う */
 int initialize_ra(sgx_enclave_id_t eid, std::string request_json,
     std::string &response_json, std::string &error_message)
@@ -664,7 +628,6 @@ int process_ra_result(sgx_enclave_id_t eid, std::string request_json,
     json::JSON res_json_obj;
     json::JSON req_json_obj = json::JSON::Load(request_json);
     
-    //ra_ctxのデコード、結果処理本処理実装
     uint32_t ra_ctx = -1;
     size_t tmp;
 
@@ -847,10 +810,6 @@ int main()
 		
         return -1;
     }
-
-    /* 設定情報の読み込み。in-procモード対応の実装時に使用 */
-    //setenv("SGX_AESM_ADDR", "0", 1); //in-proc
-    //load_settings();
     
     /* サーバの起動（RAの実行） */
     std::thread srvthread(server_logics, eid);

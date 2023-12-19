@@ -45,7 +45,7 @@ int evp_prvkey_to_u8(uint8_t (&u_prvkey)[32], EVP_PKEY *pkey)
 void print_u8_pubkey(uint8_t gx[32], uint8_t gy[32])
 {
 	std::cout << "\n\nCopy the following public keys and hardcode them into " 
-				<< "ISV's Enclave code (ex: server_enclave.cpp):\n" << std::endl;
+				<< "Server's Enclave code (ex: server_enclave.cpp):\n" << std::endl;
 
 	printf("\t{\n");
 	int index = 0;
@@ -91,7 +91,7 @@ void print_u8_pubkey(uint8_t gx[32], uint8_t gy[32])
 void print_u8_prvkey(uint8_t prvkey[32])
 {
 	std::cout << "\n\nCopy the following private key and hardcode it into " 
-				<< "SP's untrusted code (ex: client_app.cpp):\n" << std::endl;
+				<< "Client's untrusted code (ex: client_app.cpp):\n" << std::endl;
 
 	int index = 0;
 

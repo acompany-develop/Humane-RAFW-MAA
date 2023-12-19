@@ -51,26 +51,26 @@ endif
 
 
 
-######## SP側Enclave外アプリケーション（Client_App）に関する設定 ########
+######## クライアント側アプリケーション（Client_App）に関する設定 ########
 
 ## コンパイル時に使用するC/C++のソースを列挙
-SP_Cpp_Files := Client_App/client_app.cpp common/base64.cpp common/debug_print.cpp common/hexutil.cpp \
+Client_Cpp_Files := Client_App/client_app.cpp common/base64.cpp common/debug_print.cpp common/hexutil.cpp \
 				common/crypto.cpp common/jwt_util.cpp
 
 ## 使用するincludeファイル（ヘッダ）がある場所を列挙
-SP_Include_Paths := -IClient_App -I$(SGX_SDK)/include -Icommon -Iinclude
+Client_Include_Paths := -IClient_App -I$(SGX_SDK)/include -Icommon -Iinclude
 
 ## Client_Appのコンパイル時に使用するオプションを指定。
-SP_C_Flags := $(SGX_COMMON_CFLAGS) $(SP_Include_Paths)
+Client_C_Flags := $(SGX_COMMON_CFLAGS) $(Client_Include_Paths)
 
 ## 実際にはC++コンパイルするので、それ用の最終的なオプションを生成
-SP_Cpp_Flags := $(SP_C_Flags) -std=c++11 -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
+Client_Cpp_Flags := $(Client_C_Flags) -std=c++11 -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
 
 ## リンクオプション
-SP_Link_Flags := $(SGX_COMMON_CFLAGS) -lpthread -lcrypto -lssl
+Client_Link_Flags := $(SGX_COMMON_CFLAGS) -lpthread -lcrypto -lssl
 
 ## オブジェクトファイルを指定
-SP_Cpp_Objects := $(SP_Cpp_Files:.cpp=.o)
+Client_Cpp_Objects := $(Client_Cpp_Files:.cpp=.o)
 
 ## UntrustedのAppの実行バイナリ名を指定
 Client_App_Name := client_app
@@ -214,21 +214,21 @@ endif
 
 
 
-######## SP側Appオブジェクト関する設定（つまりビルド設定） ########
+######## クライアント側Appオブジェクト関する設定（つまりビルド設定） ########
 
 ## Appのオブジェクトファイルを生成。$(CC)は暗黙のルールにより、デフォルトでg++コマンド。
 Client_App/%.o: Client_App/%.cpp
-	@$(CXX) $(SP_Cpp_Flags) -c $< -o $@
+	@$(CXX) $(Client_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
 ## commonフォルダ内のコードについても同様にオブジェクトファイルを生成
 common/%.o: common/%.cpp
-	@$(CXX) $(SP_Cpp_Flags) -c $< -o $@
+	@$(CXX) $(Client_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
 ## リンクによりClient_Appの実行ファイルを生成
-$(Client_App_Name): $(SP_Cpp_Objects)
-	@$(CXX) $^ -o $@ $(SP_Link_Flags)
+$(Client_App_Name): $(Client_Cpp_Objects)
+	@$(CXX) $^ -o $@ $(Client_Link_Flags)
 	@echo "LINK =>  $@"
 
 
@@ -296,4 +296,4 @@ $(Signed_Enclave_Name): $(Enclave_Name) $(Signing_Material) $(Signature_File)
 .PHONY: clean
 
 clean:
-	@rm -f $(App_Name) $(Client_App_Name) $(Enclave_Name) $(Signing_Material) $(Signature_File) $(Signed_Enclave_Name) $(App_Cpp_Objects) $(SP_Cpp_Objects) Server_App/server_enclave_u.* $(Enclave_Cpp_Objects) Server_Enclave/server_enclave_t.*
+	@rm -f $(App_Name) $(Client_App_Name) $(Enclave_Name) $(Signing_Material) $(Signature_File) $(Signed_Enclave_Name) $(App_Cpp_Objects) $(Client_Cpp_Objects) Server_App/server_enclave_u.* $(Enclave_Cpp_Objects) Server_Enclave/server_enclave_t.*
