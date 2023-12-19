@@ -480,7 +480,7 @@ EPID-RAにおいては、検証機関（IAS）からのAttestation応答中に`O
 
 ### AEの動作モード
 DCAP-RAにおけるQuote生成では、PCE（Platform Certificate Enclave）やQE3（Quoting Enclave for 3rd party attestation）といったAEや関連の各種サービスを、Quote生成プロセス内で動作させるモードとプロセス外で動作させるモードが存在します。  
-前者のプロセス内で動作させるモードはIn-Procモード、後者のプロセス外のデーモン（AESM）に任せるモードをOut-of-Procと呼ばれます。  
+前者のプロセス内で動作させるモードはIn-Procモード、後者のプロセス外のデーモン（AESM）に任せるモードはOut-of-Procと呼ばれます。  
 （参考：[https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-nodes-aks-addon](https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-nodes-aks-addon)）
 
 AzureのDCsv3マシンでは、基本的にOut-of-Procモードのみに対応しており、In-Procモードへの切り替えは手元では成功していません。  
