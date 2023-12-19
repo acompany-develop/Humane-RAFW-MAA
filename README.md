@@ -1,4 +1,4 @@
-# Humane Intel SGX Remote Attestation Framework (Humane-RAFW)
+# Humane Intel SGX Remote Attestation Framework for Microsoft Azure Attestation (Humane-RAFW-MAA)
 ## 概要
 本リポジトリは、Intel SGXにおけるDCAP方式(*)のRemote Attestation（以下、DCAP-RA）の内、AzureのDCsv3/DCdsv3インスタンス上でMicrosoft Azure Attestation（MAA）をQuoteの検証機関とする構成のRAを、「人道的な（Humane）」難易度で手軽に実現する事の出来る、RAフレームワーク（RAFW）のコードやリソースを格納しています。  
 
