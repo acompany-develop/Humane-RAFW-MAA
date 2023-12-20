@@ -34,16 +34,17 @@ std::vector<ra_session_t> g_ra_sessions;
 sgx_status_t ecall_init_ra(uint32_t client_id, 
     uint32_t *ra_ctx, sgx_ec256_public_t *Ga)
 {
+    /* クライアントIDの境界チェック */
+    if(client_id >= CLIENT_PUBKEY_NUM)
+        return SGX_ERROR_INVALID_PARAMETER;
+
     ra_session_t session;
     session.ra_context = g_session_num;
+    session.client_id = client_id;
     *ra_ctx = g_session_num;
 
     g_ra_sessions.emplace_back(session);
     g_session_num++;
-
-    /* クライアントIDの境界チェック */
-    if(client_id >= CLIENT_PUBKEY_NUM)
-        return SGX_ERROR_INVALID_PARAMETER;
 
     /* セッションキーペアの生成 */
     sgx_status_t status = SGX_SUCCESS;
@@ -143,8 +144,9 @@ sgx_status_t ecall_process_session_keys(uint32_t ra_ctx,
         (ra_ctx + 1) > g_ra_sessions.size())
         return SGX_ERROR_UNEXPECTED;
 
-    /* クライアントIDの境界チェック */
-    if(client_id >= CLIENT_PUBKEY_NUM)
+    /* クライアントIDの境界チェック、先行処理で代入した値との一致チェック */
+    if(client_id >= CLIENT_PUBKEY_NUM || 
+        client_id != g_ra_sessions[ra_ctx].client_id)
         return SGX_ERROR_INVALID_PARAMETER;
 
     memcpy(&g_ra_sessions[ra_ctx].g_b, Gb, 64);
