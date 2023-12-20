@@ -1283,6 +1283,9 @@ int sample_remote_computation(std::string isv_url,
 
 void main_process()
 {
+    /* 暗号処理関数向けの初期化（事前処理） */
+    crypto_init();
+    
     /* 設定ファイルからの設定の読み取り */
     load_settings();
 
