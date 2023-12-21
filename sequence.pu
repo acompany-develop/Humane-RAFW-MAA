@@ -3,7 +3,7 @@ title Azure DCsv3シリーズにおけるMAA利用版のDCAP-RAフロー
 
 participant "MAA（Microsoft Azure Attestation）" as maa
 participant "Client" as sp
-participant "SGX Server App (Enclave外)" as uisv
+participant "SGX Server App（Enclave外）" as uisv
 participant "SGX Server Enclave" as tisv
 
 activate maa
