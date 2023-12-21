@@ -1,0 +1,200 @@
+@startuml humane-rafw-maa
+title Azure DCsv3シリーズにおけるMAA利用版のDCAP-RAフロー
+
+participant "MAA（Microsoft Azure Attestation）" as maa
+participant "Client" as sp
+participant "SGX Server App (Enclave外)" as uisv
+participant "SGX Server Enclave" as tisv
+
+activate maa
+activate uisv
+
+== 初期化処理 ==
+uisv -> uisv: Out-of-Procモードで動作しているかの確認
+
+activate tisv
+
+uisv -> tisv: Enclaveの生成
+uisv -> uisv: サーバの起動
+
+activate sp
+
+sp -> sp: settings_client.iniからの設定情報（接続先MAAのURL、\nEnclaveに要求する同一性情報等）の読み込み
+sp -> sp: 暗号処理関数の初期化
+
+== RAセッションの初期化 ==
+sp -> sp: クライアントIDをBase64エンコード
+note left: Enclaveコード上の署名検証用公開鍵配列の\nインデックスに等しい
+sp -> uisv: Base64エンコードしたクライアントIDをSGXサーバにポスト
+uisv -> uisv: JSONからクライアントIDを取り出しBase64デコード
+uisv -> uisv: SGXサーバ側のセッション公開鍵を\n格納する変数を初期化
+uisv -> tisv: RAセッションを初期化するためにECALLを発行\n（引数としてクライアントIDを渡す）
+tisv -> tisv: クライアントIDの境界チェック後、\nそのクライアントIDと新しいRAコンテキスト値\n（RAセッションID）を含んだ\n新しいRAセッション管理用構造体を作成し\n管理用構造体vectorに追加する
+tisv -> tisv: RA成立後の暗号通信のための共通鍵を交換するEC-DHKEの\nセッションキーペアを生成し、\nRAセッション管理用構造体に格納する
+
+alt ECALLでの処理に成功した場合
+tisv --> uisv: RAコンテキスト値とセッション公開鍵をリターン
+uisv --> sp: RAコンテキスト値とSGXサーバ側セッション公開鍵を\nBase64エンコード及びJSON化し返信
+else ECALLでの処理に失敗した場合
+tisv --> uisv: エラーステータスをリターン
+uisv --> sp: エラーメッセージを返信\nステータスコード500
+sp -> sp: 処理を終了
+end
+
+sp -> sp: JSONからRAコンテキスト値と\nSGXサーバ側セッション公開鍵を抽出し保持
+
+== 鍵交換処理・Quoteの取得 ==
+sp -> sp: クライアント側セッションキーペアを生成
+sp -> sp: SGXサーバ側セッション公開鍵とクライアント側セッション秘密鍵\nで共有秘密を導出し、そこからさらに鍵導出鍵KDKを生成
+sp -> sp: クライアント側セッション公開鍵をsgx_ec256_public_tに変換
+sp -> sp: SGXサーバ側とクライアント側それぞれの公開鍵を連結したものを\n作成し、署名用秘密鍵でそれに対するECDSA署名SigSPを生成
+
+sp -> uisv: クライアント側セッション公開鍵、SigSP、クライアントID、\nRAコンテキスト値をBase64エンコード・JSON化し、\nQuoteの生成を要求
+uisv -> uisv: SPから送信されたデータを抽出しデコード
+uisv -> tisv: 共通鍵等の生成のため、RAコンテキスト値、クライアントID、\nクライアント側セッション公開鍵、SigSPを渡しながらECALL
+tisv -> tisv: SGXサーバ側セッション秘密鍵と受け取ったクライアント側\nセッション公開鍵とで共有秘密を生成
+tisv -> tisv: 両者のセッション公開鍵の連結を生成し、\nEnclaveにハードコーディングされた署名検証用秘密鍵を用いて\nSigSPの検証を行う
+tisv -> tisv: 共有秘密からKDK（鍵導出鍵）を生成
+tisv -> tisv: KDKを用いてVK（中間者攻撃対策用鍵）と\nSK・MK（セッション共通鍵）を生成
+tisv --> uisv: ECALLからリターン
+
+opt 上記共通鍵導出ECALLに失敗した場合
+uisv --> sp: エラーステータス500を返却
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+uisv -> tisv: RAの一環として、QE3によるSGXサーバEnclaveに対する\nLAを実施する必要がある。そのために必要であるQE3の\nTarget InfoをQE3から取得する\n（sgx_qe_get_target_info()）
+tisv --> uisv: QE3のTarget Infoをリターン
+note right: 図では紛らわしいが、検証対象Enclaveではなく\nQE3への要求である点に注意
+
+uisv -> tisv: QE3のTarget Infoを引数で渡しながら、\n検証対象のSGXサーバEnclaveのREPORTを取得するための\nECALLを実行
+tisv --> uisv: QE3のTarget Infoを材料の1つとしたレポートキーにより\nSGXサーバEnclaveのREPORT構造体を生成しリターンする。\nこのREPORT内のreport dataには、両者のセッション公開鍵と\nVKの計3つの値の連結に対するSHA256ハッシュ値が\n格納されている
+uisv -> tisv: 生成される予定のQuoteサイズを\nsgx_qe_get_quote_size()で要求
+tisv --> uisv: Quoteサイズをリターン
+note right: これも主にライブラリやQE3への要求である
+
+uisv -> tisv: sgx_qe_get_quote()によりQuoteの生成を要求
+tisv --> uisv: 内部でQE3によるLAのファイナライズ、\nAzure版PCCSであるTHIMからのコラテラルの取得等を行い、\nQuoteを生成しリターン
+note right: これも主にライブラリやQE3への要求である
+
+uisv -> uisv: MAAに受理される構成のJSONにQuoteを変換する。\nただしreport dataの元となったデータを格納するフィールドは\nクライアントが後に自前で上書きするためダミーを挿入する。
+
+alt Quoteの生成まで全て成功した場合
+uisv --> sp: Quoteを内包するJSONをリターン
+else Quote生成までのいずれかの処理に失敗した場合
+uisv --> sp: エラーメッセージを返信\nステータスコード500
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+== QuoteとEnclave同一性の検証 ==
+
+sp -> sp: KDKを用いてVKを作成し、両者のセッション公開鍵とVKの連結を生成
+sp -> sp: QuoteのJSONの内、先程のreport dataの元となるデータの\nフィールドに、直前の処理で生成した連結データを格納する。\nQuoteも同様だが、URLセーフBase64エンコードして格納する
+sp -> maa: 構成証明プロバイダにQuoteのJSONを送信する
+
+alt Quoteが正当である場合
+maa --> sp: Attestation応答JWTを返信\nステータスコード200
+else 改竄・失効・フォーマット異常によりQuoteが無効である場合
+maa --> sp: ステータスコード400とエラーメッセージJSONを返信
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+sp -> maa: JWTの署名検証用JWKをリクエスト
+maa --> sp: JWKをリターン
+
+sp -> sp: JWTをヘッダ・ペイロード・署名にパース
+sp -> sp: JWTの署名方式を検証
+
+opt 署名方式がRS256以外である場合
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+sp -> sp: JWTヘッダからJWKの鍵IDを抽出
+note left: JWKには複数個の鍵についての情報が含まれているため、\nヘッダから使用されている鍵のIDを抽出し指定する必要がある
+
+sp -> sp: ID指定によりJWKから使用されている鍵情報を抽出
+sp -> sp: 抽出したRSA公開鍵をバイナリからOpenSSLのEVP形式に変換
+sp -> sp: 想定される正当な署名対象メッセージである<ヘッダ>.<ペイロード>\nの形のメッセージを作成する
+sp -> sp: JWKから抽出したRSA公開鍵を用いて電子署名の検証を実施する
+sp -> sp: JWTペイロードに含まれる発行者が\n構成証明プロバイダを指している事を確認
+sp -> sp: JWTペイロード内の生成タイムスタンプと期限切れ時間を参照し、\n現時点の時間がこの間に収まっている事を確認する
+
+opt 上記JWTの検証の結果不合格であった場合
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+sp -> sp: JWTペイロードからMRENCLAVE、MRSIGNER、\nISVSVN、ISV ProdIDを抽出
+sp -> sp: SGXサーバから受信したQuote内の上記同一性情報と、\nEnclaveにクライアントが期待する予め控えておいた同一性情報を比較
+sp -> sp: MAAから受信したJWTペイロード内の上記同一性情報と、\nEnclaveにクライアントが期待する予め控えておいた同一性情報を比較
+
+opt 上記比較において、MRENCLAVE、MRSIGNER、ISV ProdIDの不一致があったか、\n期待するISVSVNよりもQuoteまたはJWT内のそれが低い場合
+sp -> sp: 同一性不一致によりRA棄却を判断
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+sp -> sp: 両者のセッション公開鍵とVKの連結を作成し\nそのSHA256ハッシュ値を取得
+sp -> sp: Quote内のreport dataの上位32bitが\n上記ハッシュ値と一致するかを確認
+
+opt report data上位32bitとハッシュ値が不一致であった場合
+sp -> sp: 中間者攻撃の可能性があるためRA棄却を判断
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: RAを棄却して終了
+end
+
+sp -> uisv: RA受理判断結果をtrue（受理）かfalse（棄却）の文字列で表現し、\nそれをBase64エンコード+JSON化してSGXサーバに通知
+uisv -> uisv: 受信したRA受理判断結果を標準出力
+sp -> sp: KDKからセッション共通鍵SKとMKを生成
+
+== サンプル秘密計算処理 ==
+sp -> sp: SGXサーバEnclave内で秘密計算的に加算させる、\n2つの秘密情報（整数）を用意
+sp -> sp: 初期化ベクトル（IV）をCSPRNGで生成
+sp -> sp: 2つの秘密情報それぞれを、SKを鍵とし、\n生成したIVと共に128bit AES/GCM暗号化
+sp -> uisv: RAコンテキストID、2つの暗号文、IV、GCM MACタグ2つを\nBase64エンコードしJSON形式で送信
+
+uisv -> uisv: JSONからBase64デコードしつつ\nRAコンテキストIDと各暗号情報を抽出
+uisv -> tisv: 各暗号情報をEnclaveに渡す
+tisv -> tisv: グローバル変数からセッション鍵SKとMKをコピー
+tisv -> tisv: SKとIV、GCM MACタグを用いて2つの暗号文を復号
+
+tisv -> tisv: 復号して取得した2つの整数で加算を実行する
+
+tisv -> tisv: sgx_read_rand()関数で加算結果暗号化用のIVを生成
+tisv -> tisv: MKと加算結果暗号化用IVを用いて、\n加算結果を128bit AES/GCM暗号化する
+tisv -> uisv: 加算結果暗号文、IV、GCM MACタグをリターン
+
+alt 正常に秘密計算及び暗号処理が完了した場合
+uisv -> sp: 結果暗号文、IV、GCM MACタグを\nBase64エンコードしJSON形式で返信
+else 復号や暗号化に失敗した場合
+uisv -> sp: エラーメッセージを返信
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: 処理を終了
+end
+
+sp -> sp: JSONからBase64デコードしつつ\nRAコンテキストIDと各暗号情報を抽出
+sp -> sp: MK、IV、GCM MACタグを用いて結果暗号文を\n128bit AES/GCMで復号
+
+opt 復号に失敗した場合
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: 処理を終了
+end
+
+sp -> sp: 復号して取得した秘密計算（加算）結果を標準出力
+sp -> uisv: RAコンテキスト破棄要求
+uisv -> tisv: RAコンテキストを破棄
+sp -> sp: 処理を終了
+@enduml
