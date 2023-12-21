@@ -479,7 +479,7 @@ EPID-RAにおいては、検証機関（IAS）からのAttestation応答中に`O
 万一DCsv3インスタンスが何らかの脆弱性を抱えている場合、どのような応答が返ってくるのかは未知数ですが、上記から類推すると同様にエラー400が返る事が推測されます。
 
 ### AEの動作モード
-DCAP-RAにおけるQuote生成では、PCE（Platform Certificate Enclave）やQE3（Quoting Enclave for 3rd party attestation）といったAEや関連の各種サービスを、Quote生成プロセス内で動作させるモードとプロセス外で動作させるモードが存在します。  
+DCAP-RAにおけるQuote生成では、PCE（Platform Certification Enclave）やQE3（Quoting Enclave for 3rd party attestation）といったAEや関連の各種サービスを、Quote生成プロセス内で動作させるモードとプロセス外で動作させるモードが存在します。  
 前者のプロセス内で動作させるモードはIn-Procモード、後者のプロセス外のデーモン（AESM）に任せるモードはOut-of-Procと呼ばれます。  
 （参考：[https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-nodes-aks-addon](https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-nodes-aks-addon)）
 
