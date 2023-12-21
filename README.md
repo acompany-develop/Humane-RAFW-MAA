@@ -548,4 +548,4 @@ AzureのDCsv3マシンでは、基本的にOut-of-Procモードのみに対応�
 * settings_client_template.ini: 主にクライアント用の設定を列挙するためのINIファイル。**使用時には必ず`settings_client.ini`にリネームする事**。
 
 ## シーケンス図
-![humane-rafw-maa](https://github.com/acompany-develop/Humane-RAFW-MAA/assets/31073471/44e21744-3d35-4872-a3a5-0288206b0b0d)
+![humane-rafw-maa](https://github.com/acompany-develop/Humane-RAFW-MAA/assets/31073471/231225e4-d98c-42a6-a18c-07db9a21707e)
