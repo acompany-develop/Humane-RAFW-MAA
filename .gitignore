@@ -1,3 +1,4 @@
 settings_server.ini
 settings_client.ini
 *.bak
+public_key.pem

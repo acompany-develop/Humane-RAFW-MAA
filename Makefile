@@ -180,6 +180,7 @@ Enclave_Cpp_Objects := $(Enclave_Cpp_Files:.cpp=.o)
 
 ## Enclaveイメージ名とEnclave設定ファイル名の設定
 Enclave_Name := enclave.so
+Signing_Pubkey := Server_Enclave/public_key.pem
 Signing_Material := Server_Enclave/enclave_sig.dat
 Signature_File := Server_Enclave/signature.dat
 Signed_Enclave_Name := enclave.signed.so
@@ -278,6 +279,10 @@ $(Enclave_Name): Server_Enclave/server_enclave_t.o $(Enclave_Cpp_Objects)
 	@$(CXX) $^ -o $@ $(Enclave_Link_Flags)
 	@echo "LINK =>  $@"
 
+## 秘密鍵からの公開鍵の生成
+$(Signing_Pubkey): Server_Enclave/private_key.pem
+	@openssl rsa -in Server_Enclave/private_key.pem -pubout -out $@
+
 ## 2段階署名のための署名用材料の生成
 $(Signing_Material): $(Enclave_Name)
 	@$(SGX_ENCLAVE_SIGNER) gendata -enclave $(Enclave_Name) -config $(Enclave_Config_File) -out $@
@@ -287,13 +292,13 @@ $(Signature_File): $(Signing_Material)
 	@openssl dgst -sha256 -out $@ -sign Server_Enclave/private_key.pem -keyform PEM $(Signing_Material)
 
 ## Enclave未署名イメージに対しsgx_signで署名を実施
-$(Signed_Enclave_Name): $(Enclave_Name) $(Signing_Material) $(Signature_File)
+$(Signed_Enclave_Name): $(Enclave_Name) $(Signing_Material) $(Signature_File) $(Signing_Pubkey)
 #	@$(SGX_ENCLAVE_SIGNER) sign -key Server_Enclave/private_key.pem -enclave $(Enclave_Name) -out $@ -config $(Enclave_Config_File)
-	@$(SGX_ENCLAVE_SIGNER) catsig -enclave $(Enclave_Name) -config $(Enclave_Config_File) -out $@ -key Server_Enclave/public_key.pem -sig $(Signature_File) -unsigned $(Signing_Material)
+	@$(SGX_ENCLAVE_SIGNER) catsig -enclave $(Enclave_Name) -config $(Enclave_Config_File) -out $@ -key $(Signing_Pubkey) -sig $(Signature_File) -unsigned $(Signing_Material)
 	@echo "SIGN =>  $@"
 
 ## クリーンアップ用サブコマンドの定義
 .PHONY: clean
 
 clean:
-	@rm -f $(App_Name) $(Client_App_Name) $(Enclave_Name) $(Signing_Material) $(Signature_File) $(Signed_Enclave_Name) $(App_Cpp_Objects) $(Client_Cpp_Objects) Server_App/server_enclave_u.* $(Enclave_Cpp_Objects) Server_Enclave/server_enclave_t.*
+	@rm -f $(App_Name) $(Client_App_Name) $(Enclave_Name) $(Signing_Material) $(Signature_File) $(Signing_Pubkey) $(Signed_Enclave_Name) $(App_Cpp_Objects) $(Client_Cpp_Objects) Server_App/server_enclave_u.* $(Enclave_Cpp_Objects) Server_Enclave/server_enclave_t.*
