@@ -10,7 +10,7 @@ Microsoftからも公式サンプルである[microsoft-azure-attestation](https
 
 * Humane-AFWシリーズにおけるEPID-RA用フレームワークである先代の[Humane-RAFW](https://github.com/acompany-develop/Humane-RAFW)同様、複雑なAutomakeやシェルスクリプトによる難解な自動生成要素を排しており、開発者は新たに加えたい要素をMakefileやコード中に簡潔に加える事が出来ます。
 
-* 原則としてQuoteにDCAP実装内部で同梱される付属情報（コラテラル）をフェッチする際に、AzureではPCCSではなくTHIMから取得する関係で、デフォルトでは[Azure-DCAP-Client](https://github.com/microsoft/Azure-DCAP-Client)をインストールする必要があります。しかし、このライブラリは2023/12/18現在[Ubuntu 22.04で動作しない](https://github.com/microsoft/Azure-DCAP-Client/issues/175)ため、代わりにDCAPに同梱されているIntel純正のQPLというものを使用する必要があります。本リポジトリでは、Azure-DCAP-Clientは廃しており、純正QPL向けの設定ファイルも同梱しています。
+* 原則としてQuoteにDCAP実装内部で同梱される付属情報（コラテラル）をフェッチする際に、AzureではPCCSではなくTHIMから取得する関係で、デフォルトでは[Azure-DCAP-Client](https://github.com/microsoft/Azure-DCAP-Client)をインストールする必要があります。しかし、このライブラリは2023/12/18現在[Ubuntu 22.04で動作しない](https://github.com/microsoft/Azure-DCAP-Client/issues/175)ため、代わりにDCAPに同梱されているIntel純正のQPLというものを使用する必要があります。本リポジトリでは、Azure-DCAP-Clientは廃しており、純正QPL向けの設定ファイル（`sgx_default_qcnl.conf`）も同梱しています。この設定ファイルは、後述の導入手順に従い所定の場所に配置（上書き）するだけで導入が完了します。
 
 * MAAのサンプルコードは、特に検証のためQuoteをMAAに送信する際、C#のコードやDotnetを使用しています。殊にDotnetに関してはデフォルトで5.0を要求しており、Ubuntu 22.04では一筋縄では行きません。Humane-RAFW-MAAでは、Humane-RAFW同様全ての処理がC++で完結しているため、余計な依存関係なしにシンプルに処理を完遂させる事ができます。
 
@@ -546,6 +546,7 @@ AzureのDCsv3マシンでは、基本的にOut-of-Procモードのみに対応�
 * README.md
 * ca-certificates.crt: OSのCA証明書をコピーして持ってきたもの
 * settings_client_template.ini: 主にクライアント用の設定を列挙するためのINIファイル。**使用時には必ず`settings_client.ini`にリネームする事**。
+* sgx_default_qcnl.conf: コラテラルのフェッチのために内部で使用されるライブラリ（QPL）の設定ファイル。AzureのTHIMから取得するように設定を構成してある。
 
 ## シーケンス図
 ![humane-rafw-maa](https://github.com/acompany-develop/Humane-RAFW-MAA/assets/31073471/231225e4-d98c-42a6-a18c-07db9a21707e)
