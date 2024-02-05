@@ -66,7 +66,7 @@ DCAPライブラリやLinux-SGXのバージョンにより、DCAPのインスト
 
 * DCAPのリポジトリをクローンする。
     ``` bash
-    git clone https://github.com/intel/SGXDataCenterAttestationPrimitives
+    git clone --recursive https://github.com/intel/SGXDataCenterAttestationPrimitives
     ```
 
 * Quote生成ライブラリのソースフォルダに移動する。また、必要な前提パッケージのインストールを行う。
@@ -129,6 +129,16 @@ DCAPライブラリやLinux-SGXのバージョンにより、DCAPのインスト
   念の為、sgx_default_qcnl.confのオーナーや権限についても注意しておく。動作確認済みの環境では以下のようになっている：
     ```
     -rw-r--r-- 1 root root 747 Dec  4 08:42 /etc/sgx_default_qcnl.conf
+    ```
+
+* 2024/2/5現在、DCAPライブラリのバージョン1.20において、Azure上で上記confファイル内の`local_pck_url`エントリを設定すると、QE3のTarget Info取得時にクラッシュする問題が[報告されている](https://github.com/intel/SGXDataCenterAttestationPrimitives/issues/366)。この問題に対処するため、DCAP 1.20を使用している場合は、上記手順でコピー後の`/etc/sgx_default_qcnl.conf`の当該部分を以下のようにコメントアウトする。  
+    変更前：  
+    ```
+    "local_pck_url": "http://169.254.169.254/metadata/THIM/sgx/certification/v4/",
+    ```  
+    変更後：  
+    ```
+    //"local_pck_url": "http://169.254.169.254/metadata/THIM/sgx/certification/v4/",
     ```
 
 * aesmdサービスの再起動を行い、正常な起動を確認する。
