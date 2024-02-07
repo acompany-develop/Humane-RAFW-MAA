@@ -478,7 +478,9 @@ int get_quote(std::string server_url, std::string ra_ctx_b64,
         std::string original_data = 
             std::string(base64_encode<char, uint8_t>(ga_gb_vk, 144));
 
+        print_debug_message("Ga_Gb_VK -> ", DEBUG_LOG);
         print_debug_message(original_data, DEBUG_LOG);
+        print_debug_message("", DEBUG_LOG);
 
         //Report DataがGa、Gb、VKの連結に対するハッシュ値であるかをMAAに保証してもらう
         res_json_obj["runtimeData"]["data"] = original_data;
