@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <string>
+#include <stdint.h>
 
 /* ログ種別定義用の列挙型 */
 typedef enum
